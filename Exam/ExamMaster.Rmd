@@ -1,0 +1,800 @@
+---
+title: "Individual Homework BOHTA 2017"
+author: 
+- "William Paul Bullock"
+- "ZHN775" 
+- "Exam #49"
+date: "13 June 2017"
+output: pdf_document
+---
+#Preliminaries
+
+```{r results='hide', message=FALSE, warning=FALSE}
+library(ggplot2)
+library(tidyverse)
+library(plyr)
+library(reshape2)
+library(data.table)
+library(gplots)
+library(superheat)  
+```
+
+
+# Part 1: 10 super-transcription factor clusters to rule them all?(total 11p)
+
+######Question 1: In the ENCODE project, a large number of labs have pooled resources to make many ChIP experiments for a large number of transcription factors (TFs) in different cell lines. Each such experiment will give a large number of ChIP peaks, corresponding to transcription factors binding DNA. ENCODE made a “master” bed track which shows ChIP peaks  for all the transcription factors that they made ChIP experiments for. This can be found in the UCSC browser at Regulation->ENCODE regulation->Txn Factor ChIP. The below image shows an example of the track around the RXRA TSS. Each block is the ChIP peak of one TF. 
+
+As the picture show, there seem to be hotspots in the genome where many different TFs bind. At /home/bohta/HW4/part1/txnChIP.bed on the ricco.popgen.dk server there is a link to a bed file corresponding to the master track above, from the hg19 assembly. 
+
+####A: Using BEDtools in Linux, merge the ChIP peaks that overlap over 1bp or more, and produce a BED file with these regions. How many merged regions are produced compared to how many peaks you started with?  2p
+
+```{r, engine='bash', eval = F}
+# First I sorted the tnxChIP bedfile...
+
+sort -k1,1V -k2,2n txnChIP.bed > txnChIP_sorted.bed 
+
+###I sorted like this because...
+
+#Then I merged the overlapping ChiP peaks and produced, as the 4th column; a count of the number of overlapping intervals in the chromosome that comprised that merged reigon.  
+
+bedtools merge -i txnChIP_sorted.bed -c 1 -o count > merged_txnChIP_sorted.bed
+
+#Counting the number of merged reigons in comparison to the number of start peaks:
+
+wc -l txnChIP.bed
+# this returns
+# 4380444 txnChIP.bed
+
+wc -l merged_txnChIP_sorted.bed
+# this returns:
+# 746610 merged_txnChIP_sorted.bed
+
+#As such we can see there are 746610 merged reigons out of 4380444 total peaks.
+
+```
+
+####B: Using R, plot the distribution of ChIP peaks in each merged region using ggplot. Use log2 scaling for the x-axis, not logged values (in the example below, the first plot is a raw distribution, the other is with log2’d values and the third is with log2 scale). Briefly comment your plot (30 words max). 2p
+
+```{r message=FALSE, warning=FALSE}
+
+#load the bed file into R
+txnCHiP <- read.table("Data/Part1/merged_txnChIP_sorted.bed", header = F)
+
+## First attempt - 'Before I realised I could change stat to bin'
+
+# #add the number of occurences ofteh variables in column 4 as column 5
+# txnCHiP <- transform(txnCHiP, occurences = ave(V4, V4, FUN = length))
+# 
+# #remove all duplicates
+# txnCHiP <- txnCHiP[!duplicated(txnCHiP[4]),]
+
+# plot1_b <- ggplot(txnCHiP, aes(y = occurences, x = V4)) + 
+#   geom_bar(stat = "identity", color = "black", fill = "grey") +
+#   scale_x_continuous(trans='log2') +
+#   xlab("Number of peaks in merged reigon") + ylab("Number of Overlapping Reigons") +
+#   ggtitle("txnCHiP") +
+#   theme_bw()
+# 
+# plot1_b
+
+##plotting in ggplot
+
+plot1_b <- ggplot(txnCHiP, aes(x = V4)) + 
+  geom_bar(stat = "bin", color = "orange", fill = "orange") +
+  scale_x_continuous(trans='log2') +
+  xlab("Number of Peaks in Merged Reigon") + ylab("Count of Occurences") +
+  ggtitle("Distribution of txnCHiP Peaks in Merged Reigons") +
+  theme_bw()
+
+plot1_b
+
+
+##The majority of regions are not merged, (only 1 peak In the region). As the number of peaks in each  region increases, the count of occurrences decreases (becomes less likely).
+```
+
+####C: Using R only (no pasting or editing allowed in external programs), produce a new BED file that contains the 10 merged regions having the highest number of ChIP peaks. 1p
+
+```{r 1C}
+
+#sorting txnCHiP data frame by count column (descending).
+
+txnCHiP_sorted <- txnCHiP[order(-txnCHiP$V4),]
+
+#extracting top 10 rows
+
+txnCHiP_best <- txnCHiP_sorted[1:10,]
+
+#exporting as a BED file, tab delimited, no column headers or row numbers, strings output without "" notation.
+
+write.table(txnCHiP_best, "Data/Part1/txnCHiP_best.bed", sep="\t", col.names = F, row.names = F, quote = F)
+
+```
+
+####D: Upload this into the UCSC browser. Look at each merged region and try to interpret it, also taking the peaks it contains into account. What do the merged regions typically overlap? Is there a particular factor that is responsible for the clusters? 4p
+
+Amongst all 10 of the genes; the peaks correspond mostly with upstream regions of the gene, it is intuitive that promoter regions should lie here, so as to be able to alter gene expression down stream. Furthermore at many sites of the transcription factors (TFs) align almost into columns, suggesting that specific regions of the gene bind with promiscuity to a great number of TFs, rather than individual promoters for each TF being continuous expressed throughout the genes and themselves overlapping each other.
+
+Alot of TFs appear in multiple genes, and many of them seem to appear together, (e.g. MAX and YY1), this is to be expected, as TFs are not all mutually exclusive, and may be linked in some way. For example;  some may be functionally dependant on others. It could be worthwhile investigating this further to determine how they might interact with each other and affect gene expression together.
+
+“POLR2A”, shown as a transcription factor on genome browser stands out especially, as the only TF that encompasses the entire length of all 10 genes. This is in actuality showing where RNA polymerase II can bind. As this is the main mediator or the transcription process, it is unsurprising it can bind to any region that any of the TFs can bind do, which in these examples comprises all of each gene. 
+
+It’s dubious inclusion as a TF in the analysis will affect clustering by causing all the TFs to gain +1 to the number of overlaps, even those that would not have overlapped with anything otherwise. Furthermore POLR2A itself will always overlap with a huge amount of TFs and likely continually cause clusters containing it to have disproportionately high levels of overlapping and rsie to prominence in the analysis.
+
+####E: In hindsight, given the result in D, what could we have done to improve the analysis? 2p
+
+It would be beneficial to repeat this analysis omitting POLR2A as a TF; so as to remove the aforementioned biases and mis-representation of clustering caused by the inclusion of this as a TF.
+
+Potentailly removing those with only 1 overlap, or filtering for an arbitrary minimum number of overlaps could present more meaningful data. 
+
+Combining TFs into profiles, based on structural or functional similarities so as to determine if TFs with these similarities also prefer to bind in similar regions.
+
+# Part 2: Selection of tools – server part (total 18p)
+
+Intro: The professor you are doing your master thesis for wants you to analyze an RNA-seq dataset. Furthermore, she is very keen on using some of these so-called pseudo-aligner tools that she has heard so much about – more specifically Salmon and Kallisto (https://www.ncbi.nlm.nih.gov/pubmed/28263959 and https://www.ncbi.nlm.nih.gov/pubmed/27043002 respectively). 
+
+For the final analysis you can naturally only use one tool, which means you have to select either Kallisto or Salmon. Since you are a budding data scientist, you will select the best tool based on performance on real data instead of flipping a coin. More specifically, you want to analyze 3 paired end RNA-seq libraries (biological replicates) using both tools and see which one performs better. There is no need to quality trim the sequences.
+
+Part 2 is about doing the actual quantification with the two tools and the next question (part 3) is about doing the comparison (using the data we provide!).
+
+Part 2 is going to be done exclusively on the Ricco server. Note that we provide you with real-sized dataset so some waiting time might occur.
+
+To run Kallisto and Salmon you naturally need the data. In your own directory ( /home/<KU_ID>/ ) use the “ln -s” function to make a symbolic link (shortcut) to all 6 fastq files located in the /home/bohta/HW4/part2/” folder. This is done instead of copying the file to your directory and saves a lot of space (please don't copy – we will run out of hard disk space if you do!). 
+Remember you can always get information about a command you don’t know using ‘man <commandName>’. 
+
+ Note that the files with the “R1” and “R2” suffix correspond to each end of the paired end data (so the first sequence in each file is a pair, the second sequence in each file is a pair etc).
+ 
+####Question 2.1: Provide one line of code which will make symbolic links only to the 6 fastq files (hint you can write “man ln” to get the manual page on the server or look here: http://man7.org/linux/man-pages/man1/ln.1.html)1p
+ 
+```{r, engine='bash', eval = F}
+
+#run form inside destination folder,
+
+# -s makes symbolic
+# ? is a wildcard that denotes any single character
+# . denotes the link should be made in current location.
+ln -s ../../../bohta/HW4/part2/WT?_R?.fastq .
+
+```
+ 
+####Next, you want to check how well the sequencing run went. 
+####Question 2.2: use the “wc” function to calculate the number of reads in all fastq files and comment on the results using max 50 words.  2p
+
+```{r, engine='bash', eval = F}
+
+
+#grep captures all lines that begin with (denoted by ^) '+'.
+#This is then pipelined to a wc which counts the lines.
+#each read includes only one line that begins iwth the plus symbol.
+#as such this gives us the number of reads for each sample.
+
+grep '^+$' WT1_R1.fastq | wc -l
+# this returns
+45626717
+
+grep '^+$' WT1_R2.fastq | wc -l
+# this returns
+45626717
+
+
+grep '^+$' WT2_R1.fastq | wc -l
+# this returns
+41428670
+
+grep '^+$' WT2_R2.fastq | wc -l
+# this returns
+41428670
+
+
+grep '^+$' WT3_R1.fastq | wc -l
+# this returns
+19326183
+
+grep '^+$' WT3_R2.fastq | wc -l
+# this returns
+19326183
+
+```
+
+The first two libraries are larger than the third, with the third being roughly half the size. Typically, R1 is in forward orientation and R2 is reverse-complement orientation. Here R1 & R2 all have the same number of reads.; trimming data achieves this by removing promoters, adaptors, and single reads.
+
+
+#### Question 2.3:
+#### Now you are ready to quantify the data. To save time and computational resources, you will in this exam just quantify the WT1 library.  You start with Kallisto which can be run on the server with the following command: “nice /home/bohta/bin/kallisto quant”. It is important that you include the “nice” part of the command as that will enable multiple users to use the server simultaneously! Note that you can open the Kallisto documentation by typing: “nice /home/bohta/bin/kallisto quant”
+
+You want to:
+1) Tell Kallisto what isoforms to quantify (as stored in a precompiled index) by specifying 
+“--index /home/bohta/HW4/part2/kallistoIndex”.
+2) Tell Kallisto that it is a first stranded RNA-seq library by adding “--fr-stranded” to the command.
+3) Tell Kallisto to use 6 cores for the quantification by adding “-t 6” to the command (Only use 6 so there are also cores for your classmates!).
+4) Tell Kallisto to output a plain text document by adding “--plaintext” to the command.
+5) Enable bias correction.
+6) Output result to an appropriately named directory.
+
+Assignment:
+A) Report the command for running Kallisto on the WT1 RNA-seq data. 1p
+B) Report the number of pseudo-aligned reads. 1p
+C*) Report the estimated average fragment length. Based on this result, what is then the distance between the 3’end of an average read pair? Comment on the result using max 50 words. 4p
+
+```{r, engine='bash', eval = F}
+#A)
+nice /home/bohta/bin/kallisto quant --index /home/bohta/HW4/part2/kallistoIndex --fr-stranded --bias -t 6  -o ./kallisto_ans --plaintext WT1_R1.fastq WT1_R2.fastq
+
+# #Output:
+#[quant] fragment length distribution will be estimated from the data
+#[index] k-mer length: 31
+#[index] number of targets: 143,335
+#[index] number of k-mers: 108,532,752
+#[index] number of equivalence classes: 465,217
+#[quant] running in paired-end mode
+#[quant] will process pair 1: WT1_R1.fastq
+#                             WT1_R2.fastq
+#[quant] finding pseudoalignments for the reads ... done
+#[quant] learning parameters for sequence specific bias
+#[quant] processed 45,626,717 reads, 23,720,001 reads pseudoaligned
+#[quant] estimated average fragment length: 178.432
+#[   em] quantifying the abundances ... done
+#[   em] the Expectation-Maximization algorithm ran for 1,699 rounds
+
+#B)
+23,720,001 reads were pseudoaligned
+
+#C)
+
+#sum of all fragment lengths
+grep -F "TCONS" abundance.tsv |cut -f2 | paste -sd+ | bc
+325570317
+
+#numberof lines
+grep -F "TCONS" abundance.tsv |wc -l
+143335
+
+#sum / number of lines gives...
+average transcript length = 2271.394404716
+
+estimated average fragment length was 178.432
+
+#Avg 3' distance = avg fragment length - 2 * avg read length.
+
+#Look in the fasta file for read lengths... it's not specified but they seem to al be 100nt in length.
+
+#This prints the ength of every 4th line startign from the 2nd (this is the read), the length output only returns unique values.
+awk '{if(NR%4 == 2) print length($1)}' WT1_R1.fastq | uniq
+98
+awk '{if(NR%4 == 2) print length($1)}' WT1_R2.fastq | uniq
+98
+#this shows all reads are 98 nucleotides in length.
+
+# Completed using a calculator, gives:
+178.432 - (98 * 2) = -17.568
+
+#Overlap! but average distance is an absolute value so...
+17.568
+#is the number of nucleotides distance between the two 3'prime' ends on a pair of reads.
+```
+This distance is the ‘no-mans-land’ (unmapped region) or overlap between the  2 reads mapped one each to the two fragment strands. It initially was a minus number, thus suggesting that the majority of each fragment has reads which overlap and are mapped.
+
+#### Question 2.4
+#### Next, use Salmon for the quantification which can be run on the server with the following command: “nice /home/bohta/bin/salmon quant”. Note that you are quantifying reads (not alignments) and only need to consider “basic options” and that you can open the Salmon documentation by typing: “nice /home/bohta/bin/salmon quant -h”
+
+ You want to:
+1) Quantify the same isoforms as you did with Kallisto by adding “--index /home/bohta/HW4/part2/salmonIndex” to the command.
+
+2) Tell Salmon to use 6 cores for the quantification by adding “-p 6” (Only use 6 so there are also cores for your classmates!).
+
+3) Tell Salmon to automatically detect library type by adding “--libType A”.
+
+4) Turn on the bias correction algorithms.
+
+5) Output the result to an appropriate directory.
+
+Assignment:
+A*) Report the command for running Salmon on the WT1 RNA-seq data. 2p
+B) Report the most likely library type as identify by Salmon. 1p
+C) Report mapping rate. 1p
+
+```{r, engine='bash', eval = F}
+
+#A)
+nice /home/bohta/bin/salmon quant --index /home/bohta/HW4/part2/salmonIndex -p 6 --libType A --gcBias --seqBias -1 WT1_R1.fastq -2 WT1_R2.fastq -o ./salmon_ans
+
+#Recieved this warning, even though I was asked to define the library type as “--libType A”
+
+#[2017-06-14 19:59:56.547] [jointLog] [warning] NOTE: Read Lib [( WT1_R1.fastq, WT1_R2.fastq )] :
+
+#Greater than 5% of the fragments disagreed with the provided library type; check the file: ./salmon_ans/lib_format_counts.json for details
+
+
+#B)
+#When opening the lib_format_counts.json file you can see a few things regarding library type. 
+"expected_format": "ISF",
+# which seems to suggest that salmon was expecting an ISF format library.
+#furthermore, kater in the file, when looking at the number of fragments found for each format; ISF scores the highest with:
+"expected_format": "ISF",
+
+#furthermore opening /logs/salmon_quant.log one can see stated:
+Automatically detected most likely library type as ISF
+
+#C)
+# Opening /logs/salmon_quant.log one can see the mapping rate is specifed as:
+Mapping rate = 60.9567%
+```
+
+####Question 2.5:
+####Which tool aligned more reads? Comment on the result using max 50 words. 1p
+
+Salmon reads  27,812,554 and Kallisto 23,720,001.
+
+Potentially due to differences in methodology. Kallisto pseudo-aligns reads as overlapping K-mers, and indexes them to a hash table representing the transcriptome . Salmon compares unedited reads with reference transcripts, it’s slower but more accurate. It seems likely that Salmon gives greater read depth for some transcripts.
+
+####Question 2.6*: The effective length estimate (estimated by both tools) incorporates the bias corrections performed by each tool respectively into the length of the isoform. This means you can calculate RPKM/FPKM values less biased by sequence specific effects (such as length and GC content). The file with the quantification is called ‘abundance.tsv’ and ‘quant.sf’ for Kallisto and Salmon respectively. (hint: you might need to look at the actual files previously used in this assignment).
+
+A) Compare the estimated “effective length” of the isoform ‘TCONS_00000020’ from Kallisto and Salmon to each other and the reference length. This must be done either in R or with the command line tool “grep”. 1p
+B) *What could explain the difference in the effective length? Which estimate do you trust more? Answer using max 75 words. 3p
+
+```{r, engine='bash', eval = F}
+#bash command used for kallisto:
+grep -F TCONS_00000020 abundance.tsv | cat
+#Output is 
+#TCONS_00000020	4456	4830.89	0	0
+
+#bash command used for Salmon:
+grep -F TCONS_00000020 quant.sf | cat
+#Output is 
+#TCONS_00000020	4456	3835.53	0	0
+```
+A)
+In each case the 2nd column is Reference length and 3rd column is the effective length.
+As such the effecitve length for this isoform is...
+for kallisto - 4830.89
+for Salmon - 3835.5
+whereas the reference length is the same for both and is 4456.
+
+B)
+The effective length is a probabilistic representation of the expected length a sequence would have to generate the observed number of reads.
+
+I trust Salmon more, as it is more concerned with accuracy, and has deeper levels of bias correction, such as GC content, which kallisto doesn’t. Furthermore it’s expected that effective sequence length is usually smaller than the real length (unlike kallisto) because of the untranslated regions of the sequence and GC content limitations.
+
+# Part 3: Selection of tools – analysis part (total 19p)
+
+In the attached data in the part 3 folder in http://people.binf.ku.dk/albin/teaching/bohta2017/data.zip you will find results from Kallisto and Salmon runs for all three biological replicas in the file “part3.Rdata”. This file (created with the save() function) can be loaded into R with the load() function and contains 3 R objects:
+-A replicate count data.frame (“countDF”). This data.frame will be referred to as the “count data”. 
+
+-An annotation matrix (“annotationDF”). This data.frame will be referred to as “annotation”. 
+
+-A filtered RPKM replicate expression matrix that has been log10 transformed with a pseudo count of 1 (“logRpkmDF”). This data.frame with be referred to as logRpkm data/values.
+
+
+Samples from Kallisto have the prefix “K_” and ones from Salmon the prefix “S_”.
+Use these files for the rest of the part 3! Note that countDF and logRpkmDF data.frames contain different isoforms and should not be compared.
+
+####Question 3.1: Load the data into R. How many isoforms are quantified in the count data? 1p
+
+```{r}
+load(file = "part3.Rdata")
+nrow(countDF)
+
+#there are 5787 isoforms
+ 
+```
+
+####Question 3.2: You naturally want to normalize the data – more specifically you want to calculate RPKM values from the count data using the length from the annotation data. Use vectorised analysis to calculate RPKM values for all samples. A vectorised approach means using R code that calculates the operation for the whole vector (aka row or columns) simultaneously instead of one at the time (this means without using loops, the apply family of functions (apply, sapply etc.) or similar functions).
+Assignment:
+- Report the R code for how to calculate RPKM values. 3p
+
+```{r}
+
+sumDF <- data.frame(colSums(countDF))
+
+colnames(sumDF) <- "Total"
+
+countDF$Length <- annotationDF[match(rownames(countDF), annotationDF$isoform),"length"]
+
+countDF <- cbind(Isoform = rownames(countDF), countDF)
+
+meltDF <- melt(countDF, id=c("Length", "Isoform"))
+
+meltDF$Total <- sumDF[match(meltDF$variable, rownames(sumDF)),"Total"]
+
+meltRPKM_DF <- data.frame(meltDF$Isoform, meltDF$variable, meltDF$value)
+
+colnames(meltRPKM_DF) <-c("Isoform", "variable", "value")
+
+meltRPKM_DF$value <- (meltDF$value / ((meltDF$Length/1000) * (meltDF$Total/1000000)))
+
+RPKM_DF <- dcast(setDT(meltRPKM_DF), Isoform~variable, value.var=c('value'))
+
+#change first row to row names (uses tidyverse package)
+RPKM_DF <- RPKM_DF %>% remove_rownames %>% column_to_rownames(var="Isoform")
+
+```
+
+#### Question 3.3: Make a one-liner (without the use of “;”) that outputs the mean RPKM value of each sample. The restrictions from the previous question no longer apply. 2p
+
+```{r}
+#As output in table
+apply(RPKM_DF, 2, mean)
+
+#Statistical test Comparing RPKM means
+
+RPKM_DF_K <- RPKM_DF[,1:3]
+RPKM_DF_S <- RPKM_DF[,4:6]
+
+RPKM_MEANS <- data.frame(apply(RPKM_DF_K[,1:3], 1, mean), apply(RPKM_DF_S[,1:3], 1, mean))
+colnames(RPKM_MEANS) <- c("Kallisto", "Salmon")
+
+wilcox.test(RPKM_MEANS$Kallisto, RPKM_MEANS$Salmon, paired = T)
+
+
+```
+Now that you have the normalized data: time to make some summary plots
+
+####Question 3.4: Make histograms of the distribution of the logRpkm expression values. For this plot use colour to indicate the tool and use ggplot2 facets to make subplots that show each replicate (meaning you have 3 subplots in a larger plot). Provide all the R code necessary to produce the plots and comment on the distributions with max 50 words. 3p
+
+```{r}
+
+log_copy  <- logRpkmDF
+log_copy <- cbind(Isoform = rownames(log_copy), log_copy)
+log_melt <- melt(log_copy, "Isoform")
+log_melt <- log_melt[,-1]
+log_trim <- log_melt
+
+log_trim <- cbind(set = 1, log_melt)
+
+log_trim <- log_trim[,-3]
+
+log_u <- data.frame(unique(log_trim), stringsAsFactors = F)
+
+log_u <- cbind(tool = 0, log_u)
+
+log_u[1:3,1] = as.character("Kallisto")
+log_u[4:6,1] = as.character("Salmon")
+log_u[c(2,5),2] = 2
+log_u[c(3,6),2] = 3
+
+log_melt$Tool<- log_u[match(log_melt$variable, log_u$variable),"tool"]
+log_melt$replicate <- log_u[match(log_melt$variable, log_u$variable),"set"]
+
+ggplot(data=log_melt, aes(x=value, fill=Tool)) +
+  facet_grid(. ~ replicate) +
+  labs(title="Histogram for logRpkm values between all replicates on Kallisto and Salmon") +
+  labs(x="logRPKM", y="Freqency")+
+  xlim(0,3.5)+
+  geom_histogram(position="dodge")
+```
+
+For each replicate the distribution is very similar; it seems Kallisto favours lower logRPKM values (0-0.5) , while Salmon is slightly more ‘right shifted’, and seems to have a greater proportion of its frequency 0.5+ than Kallisto does. The significance of this difference is questionable, and should statistically quantified.
+
+####Question 3.5: For each tool use logRpkm to calculate all pairwise replicate Pearson correlations of the replicate expression values and report the numbers in a table (one table per tool). 2p
+
+```{r}
+
+logRpkmDF_K <- logRpkmDF[1:3]
+logRpkmDF_S <- logRpkmDF[4:6]
+K_pearson <-cor(logRpkmDF_K, use = "pairwise.complete.obs", method = "pearson")
+K_pearson
+
+S_pearson<-cor(logRpkmDF_S, use = "pairwise.complete.obs", method = "pearson")
+S_pearson
+
+```
+In general terms, correlation shows any statistical relatedness (not necessarily causality) between bivariate data (or two random variables).
+
+Here Pearson's correlation coefficient is a numerical representation from -1 to +1 of linear correlation. In each instance of the pairwise testing, we can see, on the diagonal, each replicate has positive correlation of 1, this is to be expected, as the two sets of values being compared are of course the same.
+
+In all other instances of comparison between replicates, for both tools, give a very strong positive correlation. This suggests that if one observes high or low expression values for an isoform in one replicate, you would expect similar expression levels for that isoform in other replicates. (If the correlation were 0, no inference could be made (no correlation), if it were toward -1 , a negative correlation, then low levels in one replicate would suggest high level in others, or vice-versa.)
+
+This difference may be by the differing methods used by each tool; in Kallisto this will occur depending upon how the tool decided to create fragments and read k_mers in each iteration. In Salmon this variance arises based on how it forms chains of maximal exact matches (MEMs) and super maximal exact matches (SMEMs) in each iteration.
+
+####Question 3.6: One of the best ways of evaluating replicate agreement is to calculate the cross replicate variance (often abbreviated CV) so of course you want to do that. 
+A CV value can be calculated for isoform i as follows: cvi = variance(xi) / average(xi), where xi is a vector with the replicate expression values for isoform i.
+A) Construct a function which calculates the CV and use the apply() function to calculate the CV based on logRpkm values for Kallisto and Salmon (separately). 1p
+B) Plot the distribution of CV values as density lines (in one single plot) using color to indicate the tool and log transform the x-axis (using log10). 1p
+C) Comment on the CV plots using max 75 words. 2p
+```{r}
+
+#A)
+cv <- function (x) {
+  return(var(x)/mean(x))
+}
+
+K_cv <- apply(logRpkmDF_K, 1, cv)
+K_cv <- data.frame(K_cv)
+
+S_cv <- apply(logRpkmDF_S, 1, cv)
+S_cv <- data.frame(S_cv)
+
+nrow(K_cv)
+
+#B)
+
+all_cv <- merge(K_cv, S_cv, by=0, all=TRUE)
+colnames(all_cv) <-c("Isoform", "Kallisto CV", "Salmon CV")
+
+cv_melt <- melt(all_cv, "Isoform")
+
+qplot(data = cv_melt, x = value, geom = "density", colour=variable) +
+  scale_x_continuous(trans='log10')+
+  xlab("Cross Replicate Varaince") + ylab("Density") +
+  ggtitle("Distribution of Cross Replicate Varainces for Kallisto and Salmon")
+```
+
+Both tools follow the same distribution, and are very similar it’s uncertain if they are significantly different. It seems that Salmon, has  greater cross replicate variance slightly more frequently.
+
+This suggests that Salmon is lightly less accurate over its replicas. However, because the CV is weighted by the mean, we would have to ascertain if these means are significantly different before declaring this.
+
+
+#### Question 3.7*: Based on all the results you have collected here (all of part 2 and all of part 3), discuss in max 100 words which tool would you choose to continue with if you wanted to make a differential expression analysis. 4p
+First, some statistics tests.
+
+Statistics motivation:
+
+In Q3.3 we can see Salmon has greater RPKM than Kallisto,  and in Q3.6, the CV distributions differ slightly but it is not clear if either are significant.
+
+To ascertain this I performed two paired Wilcox tests, one for RPKM values (across all replicates), Kallisto vs Salmon and one for CV values,  Kallisto vs Salmon.
+
+I used a wilcox test to validate if the mean values in both cases were significantly different, n0 being that the data sets do indeed, have significantly different means.
+
+I used this instead of a t-test as it cannot be assumed that the data follows a normal distribution. This is a paired test, because the two tools share the same origin data, they are two different “samples” of this pool.
+
+```{r}
+##Some statistical tests
+#Comparing RPKM means
+
+RPKM_DF_K <- RPKM_DF[,1:3]
+RPKM_DF_S <- RPKM_DF[,4:6]
+
+RPKM_MEANS <- data.frame(apply(RPKM_DF_K[,1:3], 1, mean), apply(RPKM_DF_S[,1:3], 1, mean))
+colnames(RPKM_MEANS) <- c("Kallisto", "Salmon")
+
+wilcox.test(RPKM_MEANS$Kallisto, RPKM_MEANS$Salmon, paired = T)
+
+#Comparing CV distributions
+
+wilcox.test(K_cv$K_cv, S_cv$S_cv, paired = T)
+
+```
+
+Statistics interpretation:
+
+In both cases the P-value was less than 2.2e-16. On a significace level of 95%, this is highly significant, and for both the RPKM value comparison, and the CV value comparison. we can reject the null hypothesis. The conclusion is that there is a significant difference in the attained RPKM values and CV between Kallisto and Salmon. 
+
+Comment (100 words):
+I would use Salmon for a differential expression analysis (DE).
+
+Although it has a greater spread across its replicates, (Q.3.6), it has a higher number of reads than Kalisto, and significantly higher RPKM values (Q3.3 & Q3.4) this suggests to me Salmon is capable of giving a greater read depth, and the loss of accuracy is due to an increase in sensitivity.
+With multiple replicates, Salmon will give more robust results closer to the true value. 
+
+Salmon’s more direct method and superior bias calculation (Q2.5 & Q2.6), along with this increased  read depth will give more accurate expression values.
+
+
+#Part 4: Exploratory Data Analysis (15p total)
+
+Two postdocs in your lab, Bob and Alice, have been collaborating on an experiment. Using your labs favorite cell line, they have generated 25 knockdowns of two transcription factors along with 25 control samples. For each knock down sample, they have measured the knock down efficiency using qPCR and quantified expression of 10000 genes using RNA-Seq.
+
+Last week the two postdocs got into an argument: Bob is accusing Alice of being sloppy in the lab and thereby ruining the experiment. Upon hearing these allegations, Alice responded by accusing Bob of sneezing into one of the samples.
+
+Your professor, who knows you have been attending a bioinformatics course, has charged you with analyzing the data to solve the dispute between Bob and Alice and determine whether the dataset is ruined.
+
+You have been supplied with an expression matrix containing normalized and log-transformed expression values, as well as the study design describing the content of each sample.
+
+####Question 0: Before you start, set your seed by set.seed to 2017 and load all packages you need for your analysis (0p – but you will get a minus point if you miss this).
+
+```{r}
+set.seed(2017)
+```
+
+####Question 1: Read both the expression matrix ("ExpressionMatrix.tab") and study design ("StudyDesign.tab") into R. These are both found in http://people.binf.ku.dk/albin/teaching/bohta2017/data.zip, part 4. Report the number of samples and the number of genes. 1p
+
+```{r}
+exp <- read.table("Data/part4/ExpressionMatrix.tab", header = TRUE)
+
+St_de <- read.table("Data/part4/StudyDesign.tab", header = TRUE)
+
+#number of samples
+ncol(exp)
+#number of genes
+nrow(exp)
+
+```
+
+
+####Question 2: Perform PCA on the samples and report the amount of variance contained in the first 5 principle components. Note: You should scale the expression values before the PCA. 2p
+
+```{r}
+pca_exp <- prcomp(t(exp), scale = TRUE)
+summary(pca_exp)
+
+#From this, it can be seen that 0.13872 of the variance (13.872%) is captured by the first 5 principle componenets. This can be seen from the Cumulative Proportion row, under PC5.
+```
+
+####Question 3: Inspect the first 2 principle components: Make a plot of PC1 vs PC2, where knock down efficiency is indicated by color and knock down target is indicated by shape. Comment on the plot using a maximum of 75 words. 2p
+```{r}
+plot_pca_exp <- data.frame(pca_exp$x, St_de)
+
+qplot(PC1, PC2, color=KnockDownEfficiency, shape=KnockDownTarget, data=plot_pca_exp)
+```
+It seems PCA1 shows the variance inherent between the knock down targets while the variance captured in PCA2 is synonymous with knock down efficiency.
+
+As such, in this data set, its seems the greatest 2 individual contributors to the variance of the data are the knock down target and the knock down efficiency.
+
+####Question 4: Perform a K-means clustering of the data, using k=3 and 10 random starting points.  Visualize the clustering by making a plot of PC1 vs PC2, where the clusters are indicated by color. Briefly comment on how the clustering corresponds to the known knockdown targets, using a maximum of 75 words. 3p
+```{r}
+exp_clst <- kmeans(t(exp), 3, nstart=10)
+Clusters  <-factor(exp_clst$cluster)
+
+qplot(PC1, PC2, color=Clusters, shape=KnockDownTarget, data=plot_pca_exp)+
+    ggtitle("PCA plot of First and Second Principal Components")
+```
+When k=3 the clusters assigned match primarily similarity to the knock-down-targets, this is unsurprising, because as aforementioned they carry the majority of the variance in the data.
+
+The difference is that some of the gene A & B samples are part of the 3rd cluster, which otherwise consists entirely of controls. 
+
+This because their knock-down-efficiencies is closer to that of the controls than others in their target, and this is also being taken into account.
+
+####Question 5*: Using a maximum number of 3 plots, investigate whether there is any truth to the postdoc allegations: Can you see a difference in samples prepared by Alice and Bob? Is there any indication Bob has ruined a sample? Discuss you results using a maximum of 75 words. 4p
+```{r}
+# Similarities
+qplot(PC1, PC2, color=PostDoc, shape=KnockDownTarget, data=plot_pca_exp)+
+ ggtitle("PCA plot of First and Second Principal Components")
+```
+
+This shows that both post-docs follow the same general trend, with regards to the first 2 PCs.
+
+```{r}
+#3rd most prominent variance is in postdocs
+qplot(PC2, PC3, color=PostDoc, shape=KnockDownTarget, data=plot_pca_exp)+
+  ggtitle("PCA plot of Second and Third Principal Components")
+```  
+Here we can see PC2 (variance in knock-down-expression), alongside PC3, which seems to capture variance existing entirely between the post-docs. There is one outlier, a control by Bob in the bottom-right, the only sample >20 on PC2, it’s likely this is the ruined sample.
+
+```{r}  
+# The ruined sample & PC4
+qplot(PC3, PC4, color=PostDoc, shape=KnockDownTarget, data=plot_pca_exp)+
+  ggtitle("PCA plot of Third and Fourth  Principal Components")
+```
+This shows PC4 also carries variance based on post-docs, mostly due to the outlier.
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+#heatmap
+
+
+# exp %>% #select(sample:PostDoc) %>% 
+#   superheat(title = "Heatmap of Expression",
+#             
+#             # cluster hierarchical for rows and cols
+#             clustering.method = "hierarchical",
+#             pretty.order.rows = TRUE,  
+#             pretty.order.cols = TRUE,  
+#             
+#             # show dendrogram for cols
+#             col.dendrogram = F,     
+#             
+#             row.title = "Gene", 
+#             column.title = "Samples",
+#             bottom.label.size = 0.01,
+#             
+#             # set color palette
+#             heat.pal = c("blue", "white", "red"))
+
+
+# #Tree??
+# exp_dist <- dist(exp)
+# plot(exp_dist)
+# 
+# exp_tree <- hclust(exp_dist)
+# plot(exp_tree)
+```
+####Question 6: Based on all you observations in Question 1-5, discuss whether the experiment is still useful, or whether the postdocs have ruined it. Use a maximum of 100 words. 3p
+
+statistical testing required.
+
+#Part 5: Differential Expression (DE) (total 18p)
+
+Another PhD student in your lab, named Caroline, has already performed a DE analysis on a subset of the above dataset using the popular R-package limma (limma performs tests for DE using a modified version of gene-wise linear regressions). She has asked for you help in further analyzing the data. She is particularly interested in whether the two knockdowns affect the same genes.
+
+The DE analysis file contains mean expression across all samples, and for each transcription factor knockdown (geneA and geneB) log fold change values (logFCs), p-values and p-values corrected for multiple testing using Benjamini-Hochberg.
+
+####Question 1: Read the DE analysis ("DifferentialExpression.tab") results into R, and show the first few lines of the file. This can be found in http://people.binf.ku.dk/albin/teaching/bohta2017/data.zip, part 5. 1p
+```{r}
+
+DE <- read.table("Data/part5/DifferentialExpression.tab", header = TRUE)
+head(DE) 
+
+```
+####Question 2: As part of a single plot, produce two MA-plots (one for each knockdown). To mitigate overplotting, points on the plot should be transparent. 2p
+```{r}
+
+DE_trim <- data.frame(DE[,2:3], DE[6])
+DE_melt <- melt(DE_trim, "meanExpression")
+
+ggplot(data=DE_melt, aes(x=meanExpression, y=value)) + 
+  geom_point(alpha=0.3, size=0.5) + 
+  facet_grid(variable ~ .)+
+  xlab("Mean expression") + 
+  ylab("Log2 Fold Change")+
+  ggtitle("MA plot Comparing both Transcription Factor Knockdowns")+
+  scale_colour_discrete(name= NULL, labels=c("Gene A", "Gene B"))
+
+```
+####Question 3: Explain how an MA-plot can be used to investigate whether expression data has been properly normalized (max 75 words). 2p
+Points are equally distributed around a Log2FoldChange of Zero (y=0), and as such the mean across probes should be close to zero. If the expresison data was not normalized, you would see points favouring one side of this horizontal line, and the mean would be further from zero.
+
+If a line of best fit was introduced, in normalized data it should be close to parrallel with the X-axis, and intercept at Log2FoldChange (Y) = 0.
+
+####Question 4: Report the number of upregulated and downregulated genes that are significantly DE after correction for multiple testing (at alpha=0.05). Which knockdown target has the highest total number of DE genes? 2p
+```{r}
+
+Alpha <- 0.05
+
+GeneA <- data.frame(DE[1], DE[3], DE[5])
+GeneB <- data.frame(DE[1], DE[6], DE[8])
+
+GeneA_DE <- subset(GeneA, GeneA[ , 3] < Alpha)
+GeneB_DE <- subset(GeneB, GeneB[ , 3] < Alpha)
+
+nrow(GeneA_DE)
+#754
+nrow(GeneB_DE)
+#1304
+```
+Gene B has the highest total number of differentially expressed genes.
+
+####Question 5: Plot the two sets of logFCs  (log2 fold changes) against each other. Color points based on whether they are significantly DE after multiple testing correction (at alpha=0.05) in either one or both of the knockdowns. 3p
+```{r}
+DE_copy <- cbind(significant = as.factor(ifelse(DE[,5]< Alpha | DE[,8]<Alpha, 1, 0)), DE)
+
+qplot(DE_copy$A.logFC, DE_copy$B.logFC, colour=DE_copy$significant)+
+  geom_point(alpha=0.5, size=0.5) +
+  xlab("Gene A logFC") + 
+  ylab("Gene B logFC") +
+  ggtitle("Comparison in the log Fold Changes between the Two Genes")+
+  scale_colour_discrete(name= "Significant?", labels=c("No", "Yes"))
+```
+
+
+####Question 6: Calculate the Pearson correlation between the logFCs of the two knockdowns, and test whether this correlation is significant. 2p
+```{r}
+cor.test(DE$A.logFC, DE$B.logFC, method = "pearson")
+```
+The post-docs have introduced a lot of variance, so much so it is the third and fourth greatest contributor to variance in the data. To quantify the significance of this, one should use a statistical test.
+
+How useful this data is depends on what it will be used for, it would be better to repeat the experiment, but the introduced difference could be counteracted by removing any systematic bias introduced by Alice or omitting those points and/or the single outlier caused by Bob entirely. This would perhaps make the data more representative of the true values.
+
+####Question 7: Caroline asks you to construct a 2-by-2 contingency table showing whether genes are significantly DE (after correcting for multiple testing, alpha=0.05) in the two knockdowns. Perform a Fisher’s Exact test for any association between the DE genes in the two knockdowns. 3p
+```{r}
+Alpha <- 0.05
+
+GeneA <- data.frame(DE[1], DE[3], DE[5])
+GeneB <- data.frame(DE[1], DE[6], DE[8])
+
+GeneA_sig <- cbind(sigA = as.factor(ifelse(GeneA[,3]< Alpha, 1, 0)), GeneA)
+GeneB_sig <- cbind(sigB = as.factor(ifelse(GeneB[,3]< Alpha, 1, 0)), GeneB)
+
+fishme <- data.frame(GeneA_sig$sigA, GeneB_sig$sigB)
+
+fishme <- table(fishme)
+
+colnames(fishme) <- c("no", "yes") 
+rownames(fishme) <- c("no", "yes") 
+
+fisher.test(fishme)
+
+```
+
+The null hypothesis here is that the proportion of significantly differentailly expressed genes is the same for the Gene A knock-down, and for the Gene B knock-down. They two follow the same distribution.
+
+Here we have a p-value < 2.116e-11 which is highly significant, as such; we can reject the null hypothesis and assert that the proportion of significantly differentailly expressed genes is different between the Gene A and Gene B knock-downs. They don't follow the same distribution.
+
+
+####Question 8: Based on Question 4-7, do you think the geneA and geneB transcription factors regulate the same genes? Use a maximum of 100 words. 3p
+
+Q5.4) Shows only the knock-downs don’t illicit the same effect.
+
+Q5.5) Shows no visible correlation between the logFC values of the knock-downs. We see Gene A requires a greater LogFC before significance than gene B.
+
+Q5.6) Shows a slight significant positive correlation, I suspect this is false, and due to the large sample size and chance.
+
+Q5.7) 
+The Fisher-Exact-Test suggests  there is a significant difference between the proportions of    significantly differentially expressed genes between the two knock-downs. The two knock-downs do not share a distribution. 
+
+This suggests that they regulate different genes, or have very few genes in common.
